@@ -122,21 +122,28 @@ func jwtMiddleware(next http.Handler) http.Handler {
 			//ValidationErrorNotValidYet   // NBF validation failed
 			//ValidationErrorId            // JTI validation failed
 			//ValidationErrorClaimsInvalid // Generic claims validation error
-			switch {
-			case strings.HasPrefix(err.Error(), "token is expired by"):
-				resp := response(-1, "Token is expired")
-				w.WriteHeader(http.StatusUnauthorized)
-				json.NewEncoder(w).Encode(resp)
-				return
-			case strings.HasPrefix(err.Error(), "signature is invalid"):
-				resp := response(-1, "Signature is invalid")
-				w.WriteHeader(http.StatusUnauthorized)
-				json.NewEncoder(w).Encode(resp)
-				return
-			default:
+			// https://godoc.org/github.com/dgrijalva/jwt-go#ValidationError
+			if ve, ok := err.(*jwt.ValidationError); ok {
+				if ve.Errors&jwt.ValidationErrorMalformed != 0 {
+					resp := response(-1, "Badly-formed token")
+					w.WriteHeader(http.StatusBadRequest)
+					json.NewEncoder(w).Encode(resp)
+				} else if ve.Errors&(jwt.ValidationErrorExpired|jwt.ValidationErrorNotValidYet) != 0 {
+					// Token is either expired or not active yet
+					resp := response(-1, "Token is expired")
+					w.WriteHeader(http.StatusUnauthorized)
+					json.NewEncoder(w).Encode(resp)
+				} else if ve.Errors&(jwt.ValidationErrorSignatureInvalid) != 0 {
+					resp := response(-1, "Signature is invalid")
+					w.WriteHeader(http.StatusUnauthorized)
+					json.NewEncoder(w).Encode(resp)
+				} else {
+					w.WriteHeader(http.StatusInternalServerError)
+				}
+			} else {
 				w.WriteHeader(http.StatusInternalServerError)
-				return
 			}
+			return
 		}
 		if !token.Valid {
 			resp := response(-1, "Token is not valid")
