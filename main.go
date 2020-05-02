@@ -113,8 +113,30 @@ func jwtMiddleware(next http.Handler) http.Handler {
 			return jwtKey, nil
 		})
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
+			log.Println(err)
+			// Standard Claim validation errors
+			//ValidationErrorAudience      // AUD validation failed
+			//ValidationErrorExpired       // EXP validation failed
+			//ValidationErrorIssuedAt      // IAT validation failed
+			//ValidationErrorIssuer        // ISS validation failed
+			//ValidationErrorNotValidYet   // NBF validation failed
+			//ValidationErrorId            // JTI validation failed
+			//ValidationErrorClaimsInvalid // Generic claims validation error
+			switch {
+			case strings.HasPrefix(err.Error(), "token is expired by"):
+				resp := response(-1, "Token is expired")
+				w.WriteHeader(http.StatusUnauthorized)
+				json.NewEncoder(w).Encode(resp)
+				return
+			case strings.HasPrefix(err.Error(), "signature is invalid"):
+				resp := response(-1, "Signature is invalid")
+				w.WriteHeader(http.StatusUnauthorized)
+				json.NewEncoder(w).Encode(resp)
+				return
+			default:
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
 		}
 		if !token.Valid {
 			resp := response(-1, "Token is not valid")
